@@ -64,6 +64,8 @@ Or run it without installing, with [uv](https://docs.astral.sh/uv/):
 uvx --from git+https://github.com/albertolozada/carbon-geo-mcp.git carbon-geo-mcp
 ```
 
+> **Guía detallada en español:** [docs/USAGE_es.md](docs/USAGE_es.md) (instalación en Windows, Claude Desktop, Claude Code CLI, MCP Inspector y problemas frecuentes).
+
 ## Connect it to an AI assistant
 
 The same configuration works in Claude Desktop (`claude_desktop_config.json`), Cursor (`.cursor/mcp.json`) and other MCP hosts. On Windows:
@@ -140,6 +142,8 @@ Portfolio: [albertolozada.github.io](https://albertolozada.github.io) · [Linked
 <summary><b>En español</b></summary>
 
 Servidor MCP que permite a un asistente de IA ejecutar, sobre archivos reales, los controles SIG que hace un auditor de proyectos de carbono: áreas por estrato en un CRS de igual área, comparación de áreas declaradas y calculadas, solapamientos, ubicación de parcelas de monitoreo, pérdida de bosque por año y completitud de atributos. Cada resultado indica el CRS utilizado y qué datos faltaban. El servidor es local y de solo lectura, y puede limitarse a carpetas concretas. Los datos de ejemplo son ficticios.
+
+**Instalación y uso paso a paso:** [docs/USAGE_es.md](docs/USAGE_es.md).
 
 </details>
 
