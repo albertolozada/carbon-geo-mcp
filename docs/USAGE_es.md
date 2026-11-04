@@ -13,6 +13,7 @@ Cuando preguntas, por ejemplo, "¿coinciden las áreas del shapefile con las del
 
 | Pregunta | Herramienta |
 |---|---|
+| "¿Estas capas están donde deben y en qué CRS debo medir?" | `plan_crs` |
 | "¿Este shapefile está en grados? ¿Tiene geometrías inválidas?" | `layer_info` |
 | "¿Cuántas hectáreas tiene cada estrato?" | `area_by_stratum` |
 | "El PD declara 12.500 ha, ¿coincide?" | `compare_declared_area` |
@@ -20,13 +21,17 @@ Cuando preguntas, por ejemplo, "¿coinciden las áreas del shapefile con las del
 | "¿Hay parcelas fuera de su estrato o duplicadas?" | `plots_in_strata` |
 | "¿Cuánto bosque se perdió en el periodo de monitoreo?" | `forest_loss_in_area` |
 | "¿Qué campos de la base de parcelas están incompletos?" | `data_completeness` |
+| "¿Hay imágenes Sentinel-2 utilizables para el periodo de monitoreo?" | `check_raster_availability` |
+| "Muéstrame en un mapa las parcelas que quedan fuera de los estratos" | `create_map` |
 
 Reglas que aplican todas las herramientas:
 
+- Antes de medir, `plan_crs` obliga a "reflexionar" sobre los sistemas de referencia: detecta capas cuyas coordenadas no cuadran con su CRS (por ejemplo, valores UTM etiquetados como grados), datums distintos y capas que abarcan varias zonas UTM, y estima la distorsión de área de UTM que puede explicar diferencias con las áreas declaradas.
 - Nunca se mide en grados. Las áreas se calculan en una proyección de igual área (Lambert Azimutal centrada en los datos) y las distancias en la zona UTM local.
 - Los polígonos se disuelven antes de medir, así que no se cuenta dos veces la misma superficie; los solapamientos se informan.
 - Un resultado de 0 (sin solapamiento, sin pérdida) es un resultado real, y los errores (archivo inexistente, campo inexistente) se devuelven como errores explícitos.
-- El servidor es local y de solo lectura: no escribe ni envía archivos.
+- El servidor es local y de solo lectura: no escribe ni envía archivos. `create_map` devuelve el mapa como imagen dentro de la respuesta, sin guardarlo.
+- Solo `check_raster_availability` usa internet: consulta un catálogo STAC (por defecto Earth Search, Sentinel-2 L2A) enviando únicamente el rectángulo envolvente del área y las fechas. La cobertura real del área se calcula en local.
 
 **Importante:** el servidor no se abre ni se usa por sí solo. Lo arranca el host cuando lo necesita. Si lo ejecutas a mano en una terminal, se queda quieto esperando, y eso es lo normal.
 
@@ -147,7 +152,10 @@ Usa carbon-geo-mcp con los archivos de E:\Proyectos\demo\carbon-geo-mcp-main\dat
 3. Revisa plots.gpkg contra los estratos: parcelas fuera, con estrato erróneo
    o a menos de 50 m del borde.
 4. Calcula la pérdida de bosque 2015-2024 con lossyear_sample.tif.
-Indica siempre el CRS utilizado.
+5. Comprueba qué fechas de Sentinel-2 entre 2024-06-01 y 2024-09-30 cubren
+   todo el proyecto con menos de un 20 % de nubes.
+6. Dibuja un mapa de los estratos con las parcelas encima.
+Empieza con plan_crs e indica siempre el CRS utilizado.
 ```
 
 Resultado esperado (los datos son ficticios y los problemas están puestos a propósito):
@@ -156,6 +164,7 @@ Resultado esperado (los datos son ficticios y los problemas están puestos a pro
 - `open_forest` con un 1,8 % más de área que la declarada.
 - 2 parcelas fuera de los estratos, 1 con el estrato equivocado, 1 a 20 m del borde y 1 par de coordenadas duplicadas.
 - 289 ha de pérdida de bosque en 2015-2024.
+- `plan_crs` propone medir áreas en igual área y distancias en EPSG:32720, y avisa de que UTM reduce las áreas un 0,05 % en el borde de los datos: eso explica por qué las 8.000 ha dibujadas en UTM dan 8.004 ha en igual área.
 
 ## 5. Uso en una auditoría real
 
@@ -164,7 +173,7 @@ Resultado esperado (los datos son ficticios y los problemas están puestos a pro
 3. Pide las comprobaciones en lenguaje normal, indicando los valores del PD o del informe de monitoreo.
 4. Confirma por tu cuenta (en QGIS o con el notebook) cualquier cifra que vaya a un hallazgo o a un informe. La herramienta acelera la exploración, pero no sustituye la verificación del auditor.
 
-**Confidencialidad:** los archivos no salen de tu ordenador, pero los resúmenes que devuelve el servidor (hectáreas, nombres de estratos, IDs de parcelas) sí llegan al modelo de IA. Antes de usarlo con datos de clientes, comprueba que la política de tu organización lo permite.
+**Confidencialidad:** los archivos no salen de tu ordenador, pero los resúmenes y los mapas que devuelve el servidor (hectáreas, nombres de estratos, IDs de parcelas) sí llegan al modelo de IA. `check_raster_availability` envía además el rectángulo envolvente del área al catálogo STAC. Antes de usarlo con datos de clientes, comprueba que la política de tu organización lo permite.
 
 ## 6. Problemas frecuentes
 
@@ -174,4 +183,5 @@ Resultado esperado (los datos son ficticios y los problemas están puestos a pro
 | Se queda cargando la primera vez | Está descargando las librerías. Ejecuta antes el comando del paso 3 de la instalación. |
 | Error "outside the folders this server may read" | El archivo está fuera de `CARBON_GEO_MCP_ROOTS`. Muévelo a la carpeta autorizada o amplía la lista. |
 | Error de CRS en un shapefile | Faltan archivos acompañantes. La carpeta debe contener el `.shp` con su `.shx`, `.dbf` y `.prj`; sin el `.prj` el servidor no mide porque no conoce el CRS. |
+| `check_raster_availability` da error de conexión | El ordenador o la red no permite acceder al catálogo STAC. Comprueba el acceso a `earth-search.aws.element84.com` o indica otro catálogo con `stac_url`. |
 | Quiero la última versión | Ejecuta `uv cache clean` y reinicia el host. |
