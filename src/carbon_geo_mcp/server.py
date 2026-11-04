@@ -12,10 +12,12 @@ import logging
 from typing import Any, Callable
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.utilities.types import Image
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
+from pydantic import BaseModel, Field
 
-from . import __version__, geo
+from . import __version__, geo, maps, stac
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("carbon-geo-mcp")
@@ -23,18 +25,34 @@ log = logging.getLogger("carbon-geo-mcp")
 INSTRUCTIONS = """\
 Audit-oriented GIS checks for carbon projects (REDD+, ARR, IFM...).
 Rules for using these tools:
-1. Start with layer_info on every layer to see its CRS, geometry problems and fields.
-2. Never compute areas or distances yourself from coordinates: use the tools. They
+1. Start with plan_crs on all the layers of the task. Read its coordinate problems,
+   warnings and checks, and state which CRS will be used for areas and distances
+   and why, before calling any measuring tool.
+2. Use layer_info to see geometry problems and fields of each layer.
+3. Never compute areas or distances yourself from coordinates: use the tools. They
    reproject to an equal-area or metric CRS and report which one they used.
-3. In every answer, state the CRS used and how many features were missing, empty,
+4. In every answer, state the CRS used and how many features were missing, empty,
    invalid or repaired, as returned by the tool.
-4. A result of 0 (no overlap, no loss, no plots outside) is a real result. If a tool
+5. A result of 0 (no overlap, no loss, no plots outside) is a real result. If a tool
    returns an error, report it; do not replace it with an estimate.
+6. Use create_map to show the layers behind a finding. Use check_raster_availability
+   before planning any image download; it only sends the bounding box and dates to
+   the catalog.
 """
 
 mcp = MCPServer(name="carbon-geo-mcp", version=__version__, instructions=INSTRUCTIONS)
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+READ_ONLY_NETWORK = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=True)
+
+
+class MapLayer(BaseModel):
+    """One layer to draw on a check map."""
+
+    path: str = Field(description="Path to a vector file.")
+    layer: str | None = Field(default=None, description="Layer name inside a multi-layer file.")
+    label: str | None = Field(default=None, description="Legend label (defaults to the file name).")
+    category_field: str | None = Field(default=None, description="Attribute used to colour features by category.")
 
 
 def _run(fn: Callable[..., dict[str, Any]], **kwargs: Any) -> dict[str, Any]:
@@ -210,6 +228,68 @@ def data_completeness(path: str, fields: list[str] | None = None, layer: str | N
         layer: Layer name inside a multi-layer file (optional).
     """
     return _run(geo.data_completeness, path=path, fields=fields, layer=layer)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def plan_crs(paths: list[str], layers: list[str | None] | None = None) -> dict[str, Any]:
+    """Reflect on the coordinate systems BEFORE measuring. For each layer: CRS, datum,
+    UTM zones and suspicious coordinates (e.g. UTM values labelled as degrees). For the
+    set: proposed CRS for areas (equal-area) and distances (UTM) with the reason, the UTM
+    area distortion at the edge of the data, datum or CRS mismatches, and the questions
+    to answer before measuring. Call this first.
+
+    Args:
+        paths: Paths of all the layers involved in the task.
+        layers: Layer names inside multi-layer files, in the same order (optional).
+    """
+    return _run(geo.plan_crs, paths=paths, layers=layers)
+
+
+@mcp.tool(annotations=READ_ONLY_NETWORK)
+def check_raster_availability(
+    aoi_path: str,
+    start_date: str,
+    end_date: str,
+    collection: str = "sentinel-2-l2a",
+    max_cloud_pct: float | None = 20.0,
+    stac_url: str = stac.DEFAULT_STAC,
+    aoi_layer: str | None = None,
+) -> dict[str, Any]:
+    """Check which satellite images exist over an area and period BEFORE downloading
+    anything: scenes per month, cloud cover, and for each date how much of the area the
+    scenes cover. Lists the dates with full coverage and acceptable cloud. Queries a STAC
+    catalog (default: Earth Search, Sentinel-2 L2A) sending only the bounding box and dates.
+
+    Args:
+        aoi_path: Polygon layer with the area of interest.
+        start_date: First date, YYYY-MM-DD.
+        end_date: Last date, YYYY-MM-DD.
+        collection: STAC collection, e.g. "sentinel-2-l2a" or "landsat-c2-l2".
+        max_cloud_pct: Maximum scene cloud cover for a date to count as usable (None = ignore).
+        stac_url: STAC API endpoint.
+        aoi_layer: Layer name inside a multi-layer AOI file (optional).
+    """
+    return _run(
+        stac.check_raster_availability, aoi_path=aoi_path, start_date=start_date, end_date=end_date,
+        collection=collection, max_cloud_pct=max_cloud_pct, stac_url=stac_url, aoi_layer=aoi_layer,
+    )
+
+
+@mcp.tool(annotations=READ_ONLY, structured_output=False)
+def create_map(layers: list[MapLayer], title: str | None = None) -> list[Any]:
+    """Draw a quick check map of up to 6 layers (polygons, lines or points), optionally
+    coloured by a category field, in the local UTM zone with a scale bar. Returns the
+    image so the findings can be shown, plus a short summary. Nothing is saved to disk.
+
+    Args:
+        layers: Layers to draw, bottom to top.
+        title: Map title (optional).
+    """
+    try:
+        png, summary = maps.create_map([layer.model_dump() for layer in layers], title)
+    except geo.GeoCheckError as exc:
+        raise ToolError(str(exc)) from exc
+    return [Image(data=png, format="png"), summary]
 
 
 def main() -> None:

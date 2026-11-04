@@ -557,3 +557,125 @@ def data_completeness(path: str, fields: list[str] | None = None, layer: str | N
         "fields": report,
         "fully_complete_fields": [r["field"] for r in report if r["missing"] == 0],
     }
+
+
+# --------------------------------------------------------------------------- #
+# 8. CRS plan ("reflection" before measuring)
+# --------------------------------------------------------------------------- #
+
+def _utm_zone(lon: float) -> int:
+    return int(np.floor((lon + 180) / 6) % 60) + 1
+
+
+def _utm_area_distortion_pct(lon: float, lat: float, zone: int) -> float:
+    """Area scale error of UTM at a point: k^2 - 1, with k from the transverse Mercator formula."""
+    lon0 = -183 + 6 * zone
+    b = np.cos(np.radians(lat)) * np.sin(np.radians(lon - lon0))
+    k = 0.9996 / np.sqrt(1 - b * b)
+    return float((k * k - 1) * 100)
+
+
+def _suspicious_coordinates(gdf: gpd.GeoDataFrame) -> list[str]:
+    minx, miny, maxx, maxy = gdf.total_bounds
+    issues = []
+    if gdf.crs.is_geographic and (abs(minx) > 180 or abs(maxx) > 180 or abs(miny) > 90 or abs(maxy) > 90):
+        issues.append(
+            "Coordinates are outside the valid range for degrees: the layer is probably in a projected CRS "
+            "(e.g. UTM) but labelled as geographic. Fix the CRS definition before measuring."
+        )
+    if not gdf.crs.is_geographic and max(abs(minx), abs(maxx), abs(miny), abs(maxy)) <= 360:
+        issues.append(
+            "Coordinates are very small for a projected CRS in metres: the layer may be in degrees but labelled "
+            "as projected. Check where it falls on a basemap before measuring."
+        )
+    return issues
+
+
+def plan_crs(paths: list[str], layers: list[str | None] | None = None) -> dict[str, Any]:
+    if not paths:
+        raise GeoCheckError("Give at least one layer path.")
+    layers = layers or [None] * len(paths)
+    if len(layers) != len(paths):
+        raise GeoCheckError("'layers' must have the same length as 'paths'.")
+
+    reports, frames = [], []
+    for path, lyr in zip(paths, layers):
+        gdf = read_layer(path, lyr)
+        issues = _suspicious_coordinates(gdf)
+        wgs = None if issues and gdf.crs.is_geographic else gdf.to_crs(WGS84)
+        datum = gdf.crs.datum.name if gdf.crs.datum else "unknown"
+        rep = {
+            "file": Path(path).name,
+            **crs_summary(gdf.crs),
+            "datum": datum,
+            "features": int(len(gdf)),
+            "coordinate_problems": issues,
+        }
+        if wgs is not None and len(wgs):
+            minx, miny, maxx, maxy = wgs.total_bounds
+            rep["bounds_wgs84"] = [round(float(v), 5) for v in (minx, miny, maxx, maxy)]
+            rep["utm_zones"] = sorted({_utm_zone(minx), _utm_zone(maxx)})
+            frames.append(wgs[[wgs.geometry.name]])
+        reports.append(rep)
+
+    result: dict[str, Any] = {"layers": reports}
+    if not frames:
+        result["proposal"] = None
+        result["warnings"] = ["No layer could be placed reliably on the globe. Fix the CRS definitions first."]
+        return result
+
+    combined = gpd.GeoDataFrame(pd.concat(frames, ignore_index=True), crs=WGS84)
+    minx, miny, maxx, maxy = combined.total_bounds
+    clon, clat = (minx + maxx) / 2, (miny + maxy) / 2
+    zones = sorted({_utm_zone(minx), _utm_zone(maxx)})
+    utm = distance_crs(combined)
+    utm_zone = _utm_zone(clon)
+    ea = equal_area_crs(combined)
+    ea_bounds = combined.to_crs(ea).total_bounds
+    width_km = (ea_bounds[2] - ea_bounds[0]) / 1000
+    height_km = (ea_bounds[3] - ea_bounds[1]) / 1000
+    edge_lon = minx if abs(minx - (-183 + 6 * utm_zone)) > abs(maxx - (-183 + 6 * utm_zone)) else maxx
+    distortion = _utm_area_distortion_pct(edge_lon, clat, utm_zone)
+
+    warnings = []
+    crs_set = {r["crs"] for r in reports}
+    datums = {r["datum"] for r in reports}
+    if len(crs_set) > 1:
+        warnings.append(f"The layers use different CRS ({', '.join(sorted(crs_set))}); they are reprojected before any overlay.")
+    if len(datums) > 1:
+        warnings.append(
+            f"The layers use different datums ({', '.join(sorted(datums))}). Shifts between datums can reach "
+            "tens or hundreds of metres; confirm the transformation is appropriate."
+        )
+    if len(zones) > 1:
+        warnings.append(
+            f"The data spans UTM zones {zones}. Distances in a single UTM zone are distorted near the far edge; "
+            "areas are measured in equal-area anyway."
+        )
+    if any(r["coordinate_problems"] for r in reports):
+        warnings.append("At least one layer has suspicious coordinates (see coordinate_problems). Do not measure it until fixed.")
+
+    result["extent_km"] = {"width": round(width_km, 2), "height": round(height_km, 2)}
+    result["proposal"] = {
+        "areas": {
+            "crs": ea.to_string(),
+            "why": "Lambert Azimuthal Equal Area centred on the data preserves areas exactly at any latitude.",
+        },
+        "distances": {
+            "crs": CRS.from_user_input(utm).to_string(),
+            "why": f"UTM zone {utm_zone} contains the centre of the data; distance error at project scale is negligible.",
+        },
+        "utm_area_distortion_at_edge_pct": round(distortion, 3),
+        "note": (
+            "If the project document computed areas in UTM, expect differences of about "
+            f"{abs(distortion):.2f} % against equal-area values from this distortion alone."
+        ),
+    }
+    result["warnings"] = warnings
+    result["checks_before_measuring"] = [
+        "Does each layer fall where the project is (compare bounds_wgs84 with the project location)?",
+        "Is the source CRS of each layer the one stated in the project documents?",
+        "Which CRS did the project proponent use for the declared areas, and does it explain any difference?",
+        "State the CRS you will use for areas and for distances before calling the measuring tools.",
+    ]
+    return result
