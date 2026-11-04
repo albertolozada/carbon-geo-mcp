@@ -1,0 +1,23 @@
+# Data: keep only the README and small sample files
+data/*
+!data/README.md
+!data/sample/
+
+# Large rasters and GIS working files
+*.tif
+*.tiff
+*.vrt
+*.zip
+*.qgz~
+*.aux.xml
+
+# Python and Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,18 @@
+name: geo-project
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - geopandas
+  - shapely
+  - pyproj
+  - rasterio
+  - rioxarray
+  - xarray
+  - numpy
+  - pandas
+  - matplotlib
+  - folium
+  - pystac-client
+  - jupyterlab
+  - pip
