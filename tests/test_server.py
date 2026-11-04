@@ -14,6 +14,7 @@ SAMPLE = Path(__file__).resolve().parents[1] / "data" / "sample"
 EXPECTED = {
     "layer_info", "area_by_stratum", "compare_declared_area", "check_overlap",
     "plots_in_strata", "forest_loss_in_area", "data_completeness",
+    "plan_crs", "check_raster_availability", "create_map",
 }
 
 
