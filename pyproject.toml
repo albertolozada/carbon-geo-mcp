@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "carbon-geo-mcp"
+version = "0.1.0"
+description = "MCP server with audit-oriented GIS checks for carbon projects"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Alberto Lozada Silva" }]
+requires-python = ">=3.10"
+keywords = ["mcp", "gis", "carbon", "redd", "remote-sensing", "audit"]
+dependencies = [
+    "mcp>=2.3,<3",
+    "geopandas>=1.0",
+    "shapely>=2.0",
+    "pyproj>=3.6",
+    "pyogrio>=0.9",
+    "rasterio>=1.4",
+    "numpy",
+    "pandas",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "matplotlib"]
+
+[project.scripts]
+carbon-geo-mcp = "carbon_geo_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/albertolozada/carbon-geo-mcp"
+Portfolio = "https://albertolozada.github.io"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/carbon_geo_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

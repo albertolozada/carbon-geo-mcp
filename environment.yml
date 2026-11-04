@@ -1,4 +1,4 @@
-name: geo-project
+name: carbon-geo-mcp
 channels:
   - conda-forge
 dependencies:
@@ -6,13 +6,14 @@ dependencies:
   - geopandas
   - shapely
   - pyproj
+  - pyogrio
   - rasterio
-  - rioxarray
-  - xarray
   - numpy
   - pandas
   - matplotlib
-  - folium
-  - pystac-client
   - jupyterlab
+  - pytest
   - pip
+  - pip:
+      - "mcp>=2.3,<3"
+      - -e .

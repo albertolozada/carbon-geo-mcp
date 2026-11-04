@@ -1,11 +1,9 @@
-# Data: keep only the README and small sample files
+# Data: keep only the README and the synthetic sample
 data/*
 !data/README.md
 !data/sample/
 
-# Large rasters and GIS working files
-*.tif
-*.tiff
+# Large rasters and GIS working files outside the sample
 *.vrt
 *.zip
 *.qgz~
@@ -14,6 +12,10 @@ data/*
 # Python and Jupyter
 __pycache__/
 *.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
 .ipynb_checkpoints/
 .venv/
 .env
