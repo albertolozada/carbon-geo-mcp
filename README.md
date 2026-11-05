@@ -1,6 +1,6 @@
 # carbon-geo-mcp
 
-![Audit checks on a synthetic example](outputs/maps/preview.png)
+![carbon-geo-mcp: GIS checks for carbon project audits, run by an AI agent on real files](outputs/maps/hero.png)
 
 [![Tests](https://github.com/albertolozada/carbon-geo-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/albertolozada/carbon-geo-mcp/actions/workflows/tests.yml)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/albertolozada/carbon-geo-mcp/blob/main/notebooks/01_analysis.ipynb)
@@ -42,6 +42,8 @@ These come from audit practice and from the most common failure of GIS agents: a
 7. **Show the work.** `create_map` returns the map as an image so the agent can show the layers behind a finding.
 
 ## Results on the synthetic example
+
+![Audit checks on the synthetic example](outputs/maps/preview.png)
 
 The sample data in [`data/sample`](data/sample) is **fictional**: an 8,000 ha project placed in the Paraguayan Chaco, delivered in EPSG:4326 (degrees), with problems planted on purpose. The tools find all of them:
 
@@ -159,7 +161,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 ├── data/sample/          synthetic, fictional sample data
 ├── docs/                 Spanish usage guide
 ├── notebooks/            demo notebook (Colab-ready)
-├── scripts/              sample data and preview map generators
+├── scripts/              sample data, preview map and banner generators
 └── outputs/maps/         figures used in this README
 ```
 
